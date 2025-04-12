@@ -1,0 +1,10 @@
+<phpunit bootstrap="tests/bootstrap.php" colors="true">
+  <testsuites>
+    <testsuite name="WACK CloudFront Invalidation Test Suite">
+      <directory>tests</directory>
+    </testsuite>
+  </testsuites>
+  <php>
+    <const name="PHPUNIT" value="true"/>
+  </php>
+</phpunit>
