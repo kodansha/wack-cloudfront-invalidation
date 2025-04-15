@@ -140,8 +140,10 @@ final class AdminMenu
 
         if (isset($options['invalidation_paths'])) {
             foreach ($options['invalidation_paths'] as $post_type => $paths_string) {
-                // Skip if the input value is already converted to an array
+                // During first-time registration (when there's no record in wp_options yet), sanitize_callback gets called multiple times.
+                // However, if the values have already been converted to a $paths_string array in the first sanitize_callback call, use them as they are.
                 if (is_array($paths_string)) {
+                    $sanitized_options['invalidation_paths'][$post_type] = $paths_string;
                     continue;
                 }
 
