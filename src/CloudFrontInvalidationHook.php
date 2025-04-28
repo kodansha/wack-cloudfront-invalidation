@@ -59,6 +59,19 @@ class CloudFrontInvalidationHook
         // Execute invalidation according to settings for each post type
         $paths = PluginSettings::get()->invalidationPathsFor($post->post_type);
 
+        /**
+         * Filters the array of CloudFront paths for the specified post type.
+         *
+         * This filter is for paths determined by the plugin settings.
+         * The $paths parameter receives values set by the plugin configuration.
+         *
+         * @param WP_Post $post  The post object being processed.
+         * @param array   $paths Array of paths to be invalidated in CloudFront.
+         *
+         * @return array Filtered array of paths.
+         */
+        $paths = apply_filters('wack_cf_inv_' . $post->post_type . '_paths', $post, $paths);
+
         if (empty($paths)) {
             return;
         }
