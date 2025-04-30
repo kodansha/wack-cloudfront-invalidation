@@ -72,12 +72,12 @@ type using a filter.
 The following filter is applied before issuing a CloudFront invalidation:
 
 ```php
-$paths = apply_filters('wack_cf_inv_' . $post->post_type . '_paths', $post, $paths);
+$paths = apply_filters('wack_cf_inv_' . $post->post_type . '_paths', $paths, $post);
 ```
 
 - **`{post_type}`**: Replace with your custom post type (e.g., `post`, `news`, etc.).
+- **`$paths`**: Array of paths determined by the post type and the plugin settings.
 - **`$post`**: The `WP_Post` object being processed.
-- **`$paths`**: Array of paths determined by the plugin settings.
 
 ### Example
 
@@ -85,7 +85,7 @@ To add the homepage (`/`) to the invalidation paths for the `post` post type,
 add the following to your theme’s `functions.php` or a custom plugin:
 
 ```php
-add_filter('wack_cf_inv_post_paths', function($post, $paths) {
+add_filter('wack_cf_inv_post_paths', function($paths, $post) {
     $paths[] = '/';
     return $paths;
 }, 10, 2);
@@ -93,6 +93,10 @@ add_filter('wack_cf_inv_post_paths', function($post, $paths) {
 
 This filter allows you to modify or extend the list of paths to be invalidated
 for each post type, providing flexible cache control.
+
+> [!TIP]
+> If you want to modify or extend the list of paths for the `news` post type,
+> use `wack_cf_inv_news_paths` instead of `wack_cf_inv_post_paths`.
 
 ## Tips
 

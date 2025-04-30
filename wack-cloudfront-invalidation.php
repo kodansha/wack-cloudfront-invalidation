@@ -4,7 +4,7 @@
  * Plugin Name: WACK CloudFront Invalidation
  * Plugin URI: https://github.com/kodansha/wack-cloudfront-invalidation
  * Description: Invalidate CloudFront caches when a post is published or updated.
- * Version: 0.1.0
+ * Version: 0.1.1
  * Author: KODANSHAtech LLC.
  * Author URI: https://github.com/kodansha
  * License: GPLv3 or later

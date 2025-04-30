@@ -65,12 +65,12 @@ class CloudFrontInvalidationHook
          * This filter is for paths determined by the plugin settings.
          * The $paths parameter receives values set by the plugin configuration.
          *
-         * @param WP_Post $post  The post object being processed.
          * @param array   $paths Array of paths to be invalidated in CloudFront.
+         * @param WP_Post $post  The post object being processed.
          *
          * @return array Filtered array of paths.
          */
-        $paths = apply_filters('wack_cf_inv_' . $post->post_type . '_paths', $post, $paths);
+        $paths = apply_filters('wack_cf_inv_' . $post->post_type . '_paths', $paths, $post);
 
         if (empty($paths)) {
             return;
