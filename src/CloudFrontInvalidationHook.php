@@ -80,7 +80,8 @@ class CloudFrontInvalidationHook
 
         // Check if dry-run mode is enabled
         if (defined('WACK_CF_INV_DRY_RUN') && constant('WACK_CF_INV_DRY_RUN') === true) {
-            Utility::infoLog('CloudFront Invalidation Dry Run: ' . json_encode($paths));
+            $distributionId = defined('WACK_CF_INV_DISTRIBUTION_ID') ? constant('WACK_CF_INV_DISTRIBUTION_ID') : 'not defined';
+            Utility::infoLog('[CloudFront Invalidation Dry Run] Distribution ID: ' . $distributionId . ', Paths: ' . json_encode($paths));
         } else {
             $this->executeInvalidation($paths, $callerReferenceID);
         }
