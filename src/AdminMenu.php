@@ -88,6 +88,66 @@ final class AdminMenu
         );
 
         //----------------------------------------------------------------------
+        // General Settings Section
+        //----------------------------------------------------------------------
+        add_settings_section(
+            'wack-cloudfront-invalidation-settings-general-section',
+            'General Settings',
+            function () {
+                echo '<p>Configure the basic settings for CloudFront invalidation.</p>';
+            },
+            'wack-cloudfront-invalidation-settings-page',
+        );
+
+        // Distribution ID
+        add_settings_field(
+            'distribution_id',
+            'Distribution ID',
+            function () {
+                $settings_option = get_option('wack_cloudfront_invalidation_settings');
+                $distribution_id = $settings_option['distribution_id'] ?? '';
+                $is_disabled_by_constant = !is_null(\WackCloudfrontInvalidation\PluginSettings::getDistributionIdFromConstant());
+                $disabled_attr = $is_disabled_by_constant ? 'disabled' : '';
+                ?>
+                <input type="text" style="width: 90%;" name="wack_cloudfront_invalidation_settings[distribution_id]" value="<?php echo esc_attr($distribution_id); ?>" <?php echo $disabled_attr; ?> />
+                <?php if ($is_disabled_by_constant): ?>
+                    <p class="description">This setting is configured by a constant and cannot be changed.</p>
+                <?php else: ?>
+                    <p class="description">Enter the CloudFront Distribution ID.</p>
+                <?php endif; ?>
+                <?php
+            },
+            'wack-cloudfront-invalidation-settings-page',
+            'wack-cloudfront-invalidation-settings-general-section',
+        );
+
+        // Dry Run
+        add_settings_field(
+            'dry_run',
+            'Dry Run',
+            function () {
+                $settings_option = get_option('wack_cloudfront_invalidation_settings');
+                $dry_run = $settings_option['dry_run'] ?? false;
+                $is_disabled_by_constant = !is_null(\WackCloudfrontInvalidation\PluginSettings::getDryRunFromConstant());
+                $disabled_attr = $is_disabled_by_constant ? 'disabled' : '';
+                $checked_attr = $dry_run ? 'checked' : '';
+                ?>
+                <label>
+                    <input type="checkbox" name="wack_cloudfront_invalidation_settings[dry_run]" value="1" <?php echo $checked_attr; ?> <?php echo $disabled_attr; ?> />
+                    Enable Dry Run mode
+                </label>
+                <?php if ($is_disabled_by_constant): ?>
+                    <p class="description">This setting is configured by a constant and cannot be changed.</p>
+                <?php else: ?>
+                    <p class="description">When enabled, CloudFront Invalidation will not be executed and only logs will be output.</p>
+                <?php endif; ?>
+                <?php
+            },
+            'wack-cloudfront-invalidation-settings-page',
+            'wack-cloudfront-invalidation-settings-general-section',
+        );
+
+        //----------------------------------------------------------------------
         // Invalidation Paths Section
         //----------------------------------------------------------------------
         add_settings_section(
@@ -138,6 +198,22 @@ final class AdminMenu
         $sanitized_options = [];
         $errors = [];
 
+        // Distribution ID
+        if (isset($options['distribution_id'])) {
+            $sanitized_options['distribution_id'] = sanitize_text_field($options['distribution_id']);
+        }
+
+        // Dry Run
+        // If configured by constant, retain the database value
+        if (is_null(\WackCloudfrontInvalidation\PluginSettings::getDryRunFromConstant())) {
+            $sanitized_options['dry_run'] = isset($options['dry_run']) && $options['dry_run'] === '1';
+        } else {
+            // If configured by constant, retain the existing value
+            $current_option_value = get_option('wack_cloudfront_invalidation_settings');
+            $sanitized_options['dry_run'] = $current_option_value['dry_run'] ?? false;
+        }
+
+        // Invalidation Paths
         if (isset($options['invalidation_paths'])) {
             foreach ($options['invalidation_paths'] as $post_type => $paths_string) {
                 // During first-time registration (when there's no record in wp_options yet), sanitize_callback gets called multiple times.

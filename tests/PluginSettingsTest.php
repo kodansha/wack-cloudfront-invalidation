@@ -3,6 +3,7 @@
 namespace WackCloudfrontInvalidationTest;
 
 use WP_Mock;
+use Mockery;
 use WackCloudfrontInvalidation\PluginSettings;
 
 final class PluginSettingsTest extends WP_Mock\Tools\TestCase
@@ -39,51 +40,80 @@ final class PluginSettingsTest extends WP_Mock\Tools\TestCase
     }
 
     //==========================================================================
-    // invalidationPathsFor
+    // getDistributionIdFromDatabase
     //==========================================================================
     // phpcs:ignore
-    public function test_invalidationPathsFor_found(): void
+    public function test_getDistributionIdFromDatabase_settings_found(): void
     {
         WP_Mock::userFunction('get_option')
+            ->once()
             ->with('wack_cloudfront_invalidation_settings')
             ->andReturn([
-                'invalidation_paths' => [
-                    'post' => [
-                        '/posts/*',
-                        '/article/%id%',
-                    ],
-                ],
+                'distribution_id' => 'E1234567890ABC',
             ]);
-
-        $instance = PluginSettings::get();
-        $this->assertSame(['/posts/*', '/article/%id%'], $instance->invalidationPathsFor('post'));
+        $result = PluginSettings::getDistributionIdFromDatabase();
+        $this->assertSame('E1234567890ABC', $result);
     }
 
     // phpcs:ignore
-    public function test_invalidationPathsFor_not_found_for_post_type(): void
+    public function test_getDistributionIdFromDatabase_settings_found_but_invalid(): void
     {
         WP_Mock::userFunction('get_option')
+            ->once()
             ->with('wack_cloudfront_invalidation_settings')
-            ->andReturn([
-                'invalidation_paths' => [
-                    'post' => [
-                        '/posts/*',
-                    ],
-                ],
-            ]);
-
-        $instance = PluginSettings::get();
-        $this->assertSame([], $instance->invalidationPathsFor('news'));
+            ->andReturn([]);
+        $result = PluginSettings::getDistributionIdFromDatabase();
+        $this->assertNull($result);
     }
 
     // phpcs:ignore
-    public function test_invalidationPathsFor_completely_not_found(): void
+    public function test_getDistributionIdFromDatabase_settings_not_found(): void
     {
         WP_Mock::userFunction('get_option')
+            ->once()
             ->with('wack_cloudfront_invalidation_settings')
             ->andReturn(false);
+        $result = PluginSettings::getDistributionIdFromDatabase();
+        $this->assertNull($result);
+    }
 
-        $instance = PluginSettings::get();
-        $this->assertSame([], $instance->invalidationPathsFor('post'));
+    //==========================================================================
+    // getDryRunFromDatabase
+    //==========================================================================
+    // phpcs:ignore
+    public function test_getDryRunFromDatabase_settings_found_true(): void
+    {
+        WP_Mock::userFunction('get_option')
+            ->once()
+            ->with('wack_cloudfront_invalidation_settings')
+            ->andReturn([
+                'dry_run' => true,
+            ]);
+        $result = PluginSettings::getDryRunFromDatabase();
+        $this->assertTrue($result);
+    }
+
+    // phpcs:ignore
+    public function test_getDryRunFromDatabase_settings_found_false(): void
+    {
+        WP_Mock::userFunction('get_option')
+            ->once()
+            ->with('wack_cloudfront_invalidation_settings')
+            ->andReturn([
+                'dry_run' => false,
+            ]);
+        $result = PluginSettings::getDryRunFromDatabase();
+        $this->assertFalse($result);
+    }
+
+    // phpcs:ignore
+    public function test_getDryRunFromDatabase_settings_not_found(): void
+    {
+        WP_Mock::userFunction('get_option')
+            ->once()
+            ->with('wack_cloudfront_invalidation_settings')
+            ->andReturn(false);
+        $result = PluginSettings::getDryRunFromDatabase();
+        $this->assertFalse($result);
     }
 }
