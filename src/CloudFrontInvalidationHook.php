@@ -85,9 +85,9 @@ class CloudFrontInvalidationHook
 
         $paths = array_map(fn($path) => $this->replacePlaceholder($path, $post), $paths);
 
-        // Check if dry-run mode is enabled
-        if (defined('WACK_CF_INV_DRY_RUN') && constant('WACK_CF_INV_DRY_RUN') === true) {
-            $distributionId = defined('WACK_CF_INV_DISTRIBUTION_ID') ? constant('WACK_CF_INV_DISTRIBUTION_ID') : 'not defined';
+        // Check if Dry Run mode is enabled
+        if (PluginSettings::get()->dryRun()) {
+            $distributionId = PluginSettings::get()->distributionId() ?? 'not defined';
             Utility::infoLog('[CloudFront Invalidation Dry Run] Distribution ID: ' . $distributionId . ', Paths: ' . json_encode($paths));
         } else {
             $this->executeInvalidation($paths, $callerReferenceID);
@@ -142,8 +142,9 @@ class CloudFrontInvalidationHook
      */
     private function executeInvalidation(array $paths, string $callerReferenceID): void
     {
-        // Check if the CloudFront distribution ID constant is defined and not empty.
-        if (!defined('WACK_CF_INV_DISTRIBUTION_ID') || empty(constant('WACK_CF_INV_DISTRIBUTION_ID'))) {
+        // Check if CloudFront Distribution ID is defined
+        $distributionId = PluginSettings::get()->distributionId();
+        if (empty($distributionId)) {
             Utility::errorLog('CloudFront Invalidation Error: Distribution ID not defined.');
             return;
         }
@@ -155,7 +156,7 @@ class CloudFrontInvalidationHook
 
         try {
             $client->createInvalidation([
-                'DistributionId' => constant('WACK_CF_INV_DISTRIBUTION_ID'),
+                'DistributionId' => $distributionId,
                 'InvalidationBatch' => [
                     'CallerReference' => $callerReferenceID,
                     'Paths' => [

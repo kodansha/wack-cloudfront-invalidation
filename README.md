@@ -8,8 +8,13 @@ installation that uses CloudFront as a CDN.
 
 ## How it works
 
-This plugin listens to the `save_post` action and sends an invalidation request
-to CloudFront when a post is published or updated.
+This plugin triggers invalidation for published content updates by using:
+
+- `save_post`
+- `rest_after_insert_{post_type}` (for `post` and public custom post types)
+
+It skips autosaves, revisions, and unpublished states such as `draft` and
+`auto-draft`.
 
 ## Installation
 
@@ -38,19 +43,20 @@ for more information on how to set up credentials.
 
 ### CloudFront Distribution ID
 
-Specify the CloudFront Distribution ID to be invalidated using the
-`WACK_CF_INV_DISTRIBUTION_ID` constant.
+You can configure a CloudFront Distribution ID in either of the following ways:
 
-Add the following to your `wp-config.php` file or somewhere similar:
+1. Set `WACK_CF_INV_DISTRIBUTION_ID` in `wp-config.php` (or equivalent)
+2. Enter it in the plugin settings page (`WACK Stack` > `WACK CF Inv`)
 
 ```php
 define('WACK_CF_INV_DISTRIBUTION_ID', 'YOUR_CLOUDFRONT_DISTRIBUTION_ID');
 ```
 
+> [!IMPORTANT]
+> If `WACK_CF_INV_DISTRIBUTION_ID` is defined, it takes precedence over the value stored in the database.
+
 > [!NOTE]
-> Currently, only the CloudFront Distribution ID specified by the
-> `WACK_CF_INV_DISTRIBUTION_ID` constant will be targeted, and it's not possible
-> to specify more than one CloudFront Distribution.
+> This plugin supports only one CloudFront Distribution ID.
 
 ### Invalidation Path Settings
 
@@ -63,6 +69,11 @@ each post type.
 > [!IMPORTANT]
 > To specify multiple paths, list them separated by line breaks.
 > Empty lines will be ignored.
+
+You can use the following placeholders in each path:
+
+- `%id%`: Replaced with the post ID
+- `%slug%`: Replaced with the post slug (falls back to post ID when slug is empty)
 
 ## `wack_cf_inv_{post_type}_paths` filter
 
@@ -102,9 +113,14 @@ for each post type, providing flexible cache control.
 
 ### `WACK_CF_INV_DRY_RUN` constant
 
-If the `WACK_CF_INV_DRY_RUN` constant is defined and set to `true`, the actual
-CloudFront invalidation execution will be skipped, and only log output will
-be performed.
+Dry Run can be configured either by constant (`WACK_CF_INV_DRY_RUN`) or from
+the plugin settings page.
+
+When `WACK_CF_INV_DRY_RUN` is defined, its value takes precedence over the
+database setting.
+
+If Dry Run is enabled, the actual CloudFront invalidation execution will be
+skipped, and only log output will be performed.
 
 You can use this for testing behavior in development environments.
 
