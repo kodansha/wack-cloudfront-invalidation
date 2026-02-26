@@ -1,0 +1,14 @@
+{
+  "preset": "per",
+  "exclude": [
+    "vendor"
+  ],
+  "rules": {
+    "array_indentation": true,
+    "array_syntax": {
+      "syntax": "short"
+    },
+    "single_quote": true,
+    "no_singleline_whitespace_before_semicolons": true
+  }
+}
