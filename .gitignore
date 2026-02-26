@@ -1,17 +1,6 @@
 vendor/
 composer.lock
 
-### PHPUnit ###
-# Covers PHPUnit
-# Reference: https://phpunit.de/
-
-# Generated files
+# PHPUnit Generated files
 .phpunit.result.cache
 .phpunit.cache
-
-# PHPUnit
-/app/phpunit.xml
-/phpunit.xml
-
-# Build data
-/build/
