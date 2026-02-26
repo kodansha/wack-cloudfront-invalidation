@@ -193,7 +193,7 @@ final class AdminMenu
     /**
      * Sanitize the options passed in
      */
-    public function optionsSanitizeCallback($options): array | null
+    public function optionsSanitizeCallback($options): ?array
     {
         $sanitized_options = [];
         $errors = [];

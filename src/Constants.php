@@ -14,7 +14,7 @@ final class Constants
      *
      * @return string|null Distribution ID, or null if the constant is not defined
      */
-    public static function distributionIdConstant(): string | null
+    public static function distributionIdConstant(): ?string
     {
         if (defined('WACK_CF_INV_DISTRIBUTION_ID')) {
             return constant('WACK_CF_INV_DISTRIBUTION_ID');
@@ -28,7 +28,7 @@ final class Constants
      *
      * @return bool|null Dry Run flag, or null if the constant is not defined
      */
-    public static function dryRunConstant(): bool | null
+    public static function dryRunConstant(): ?bool
     {
         if (defined('WACK_CF_INV_DRY_RUN')) {
             return constant('WACK_CF_INV_DRY_RUN');

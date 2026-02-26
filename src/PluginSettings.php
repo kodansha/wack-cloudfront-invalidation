@@ -12,7 +12,7 @@ final class PluginSettings
     private static PluginSettings $instance;
 
     private array $invalidation_paths;
-    private string | null $distribution_id;
+    private ?string $distribution_id;
     private bool $dry_run;
 
     final private function __construct()
@@ -42,7 +42,7 @@ final class PluginSettings
      *
      * @return string|null Distribution ID
      */
-    public function distributionId(): string | null
+    public function distributionId(): ?string
     {
         return $this->distribution_id;
     }
@@ -97,7 +97,7 @@ final class PluginSettings
      *
      * @return string|null Distribution ID
      */
-    public static function getDistributionId(): string | null
+    public static function getDistributionId(): ?string
     {
         $distribution_id = self::getDistributionIdFromConstant();
 
@@ -113,7 +113,7 @@ final class PluginSettings
      *
      * @return string|null Distribution ID
      */
-    public static function getDistributionIdFromConstant(): string | null
+    public static function getDistributionIdFromConstant(): ?string
     {
         return Constants::distributionIdConstant();
     }
@@ -123,7 +123,7 @@ final class PluginSettings
      *
      * @return string|null Distribution ID
      */
-    public static function getDistributionIdFromDatabase(): string | null
+    public static function getDistributionIdFromDatabase(): ?string
     {
         $distribution_id = null;
         $settings_option = get_option('wack_cloudfront_invalidation_settings');
@@ -160,7 +160,7 @@ final class PluginSettings
      *
      * @return bool|null Dry Run flag
      */
-    public static function getDryRunFromConstant(): bool | null
+    public static function getDryRunFromConstant(): ?bool
     {
         return Constants::dryRunConstant();
     }
