@@ -6,7 +6,7 @@ use WP_Mock;
 use WackCloudfrontInvalidation\Utility;
 
 /**
- * Utility クラスのテスト
+ * Tests for the Utility class
  */
 final class UtilityTest extends WP_Mock\Tools\TestCase
 {
@@ -16,7 +16,7 @@ final class UtilityTest extends WP_Mock\Tools\TestCase
     // phpcs:ignore
     public function test_getPostTypes_filters_default_post_types(): void
     {
-        // page / attachment / revision / nav_menu_item などのデフォルト投稿タイプは除外される
+        // Default post types such as page / attachment / revision / nav_menu_item are excluded
         WP_Mock::userFunction('get_post_types')
             ->once()
             ->with(['public' => true], 'objects')
@@ -31,13 +31,13 @@ final class UtilityTest extends WP_Mock\Tools\TestCase
 
         $result = Utility::getPostTypes();
 
-        $this->assertEmpty($result, 'デフォルト投稿タイプはすべて除外される');
+        $this->assertEmpty($result, 'All default post types are excluded');
     }
 
     // phpcs:ignore
     public function test_getPostTypes_keeps_custom_post_types(): void
     {
-        // カスタム投稿タイプはフィルタリングされずに残る
+        // Custom post types remain without being filtered out
         WP_Mock::userFunction('get_post_types')
             ->once()
             ->with(['public' => true], 'objects')
@@ -50,15 +50,15 @@ final class UtilityTest extends WP_Mock\Tools\TestCase
         $result = Utility::getPostTypes();
         $names = array_map(fn($pt) => $pt->name, $result);
 
-        $this->assertNotContains('page', $names, 'page はデフォルト投稿タイプなので除外される');
-        $this->assertContains('news', $names, 'カスタム投稿タイプ news は残る');
-        $this->assertContains('book', $names, 'カスタム投稿タイプ book は残る');
+        $this->assertNotContains('page', $names, 'page is excluded because it is a default post type');
+        $this->assertContains('news', $names, 'Custom post type news remains');
+        $this->assertContains('book', $names, 'Custom post type book remains');
     }
 
     // phpcs:ignore
     public function test_getPostTypes_keeps_post_type(): void
     {
-        // 'post' 投稿タイプはデフォルト除外リストに入っておらず残る
+        // The 'post' post type is not in the default exclusion list and remains
         WP_Mock::userFunction('get_post_types')
             ->once()
             ->with(['public' => true], 'objects')
@@ -70,14 +70,14 @@ final class UtilityTest extends WP_Mock\Tools\TestCase
         $result = Utility::getPostTypes();
         $names = array_map(fn($pt) => $pt->name, $result);
 
-        $this->assertContains('post', $names, "'post' 投稿タイプはフィルタ対象外なので残る");
-        $this->assertNotContains('page', $names, "'page' は除外される");
+        $this->assertContains('post', $names, "'post' post type remains because it is not filtered out");
+        $this->assertNotContains('page', $names, "'page' is excluded");
     }
 
     // phpcs:ignore
     public function test_getPostTypes_returns_empty_when_no_post_types(): void
     {
-        // 取得した投稿タイプが空の場合は空配列を返す
+        // Returns an empty array when no post types are retrieved
         WP_Mock::userFunction('get_post_types')
             ->once()
             ->with(['public' => true], 'objects')
@@ -93,8 +93,8 @@ final class UtilityTest extends WP_Mock\Tools\TestCase
     // phpcs:ignore
     public function test_infoLog_does_not_throw(): void
     {
-        // logger() 関数が存在しない環境では error_log() へフォールバックする
-        // 例外なく実行されることを確認する
+        // Falls back to error_log() when the logger() function does not exist
+        // Ensures it runs without throwing an exception
         $this->expectNotToPerformAssertions();
         Utility::infoLog('Test info message');
     }
@@ -105,8 +105,8 @@ final class UtilityTest extends WP_Mock\Tools\TestCase
     // phpcs:ignore
     public function test_errorLog_does_not_throw(): void
     {
-        // logger() 関数が存在しない環境では error_log() へフォールバックする
-        // 例外なく実行されることを確認する
+        // Falls back to error_log() when the logger() function does not exist
+        // Ensures it runs without throwing an exception
         $this->expectNotToPerformAssertions();
         Utility::errorLog('Test error message');
     }

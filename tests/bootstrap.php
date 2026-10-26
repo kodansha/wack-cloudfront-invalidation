@@ -6,7 +6,7 @@ require_once dirname(__DIR__) . '/vendor/autoload.php';
 // Bootstrap WP_Mock to initialize built-in features
 WP_Mock::bootstrap();
 
-// テスト用の WP_Post スタブを定義
+// Define a WP_Post stub for testing
 if (!class_exists('WP_Post')) {
     class WP_Post
     {

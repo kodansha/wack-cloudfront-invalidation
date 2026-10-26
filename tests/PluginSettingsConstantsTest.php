@@ -5,17 +5,17 @@ namespace WackCloudfrontInvalidationTest;
 use WackCloudfrontInvalidation\PluginSettings;
 
 /**
- * PluginSettings の定数オーバーライド機能のテスト
+ * Tests for the constant override feature of PluginSettings
  *
- * PHP 定数は一度定義すると変更できないため、すべてのテストを独立プロセスで実行する。
- * また、WP_Mock\Tools\TestCase は PHP 8.5 との互換性問題があるため、
- * このクラスは PHPUnit\Framework\TestCase を継承し、WP 関数呼び出しが
- * 発生しないコードパスのみを対象とする。
+ * PHP constants cannot be changed once defined, so all tests run in separate processes.
+ * Also, because WP_Mock\Tools\TestCase has compatibility issues with PHP 8.5,
+ * this class extends PHPUnit\Framework\TestCase and only covers code paths
+ * that do not call WordPress functions.
  */
 final class PluginSettingsConstantsTest extends \PHPUnit\Framework\TestCase
 {
     //==========================================================================
-    // getDistributionIdFromConstant (定数定義済みケース)
+    // getDistributionIdFromConstant (constant defined)
     //==========================================================================
 
     /**
@@ -24,7 +24,7 @@ final class PluginSettingsConstantsTest extends \PHPUnit\Framework\TestCase
      */
     public function test_getDistributionIdFromConstant_returns_value_when_defined(): void
     {
-        // WACK_CF_INV_DISTRIBUTION_ID が定義されていれば、その値を返す
+        // Returns the value when WACK_CF_INV_DISTRIBUTION_ID is defined
         define('WACK_CF_INV_DISTRIBUTION_ID', 'E1234567890ABC');
 
         $result = PluginSettings::getDistributionIdFromConstant();
@@ -32,7 +32,7 @@ final class PluginSettingsConstantsTest extends \PHPUnit\Framework\TestCase
     }
 
     //==========================================================================
-    // getDryRunFromConstant (定数定義済みケース)
+    // getDryRunFromConstant (constant defined)
     //==========================================================================
 
     /**
@@ -41,7 +41,7 @@ final class PluginSettingsConstantsTest extends \PHPUnit\Framework\TestCase
      */
     public function test_getDryRunFromConstant_returns_true_when_defined(): void
     {
-        // WACK_CF_INV_DRY_RUN = true のとき true を返す
+        // Returns true when WACK_CF_INV_DRY_RUN = true
         define('WACK_CF_INV_DRY_RUN', true);
 
         $result = PluginSettings::getDryRunFromConstant();
@@ -54,7 +54,7 @@ final class PluginSettingsConstantsTest extends \PHPUnit\Framework\TestCase
      */
     public function test_getDryRunFromConstant_returns_false_when_defined(): void
     {
-        // WACK_CF_INV_DRY_RUN = false のとき false を返す
+        // Returns false when WACK_CF_INV_DRY_RUN = false
         define('WACK_CF_INV_DRY_RUN', false);
 
         $result = PluginSettings::getDryRunFromConstant();
@@ -62,7 +62,7 @@ final class PluginSettingsConstantsTest extends \PHPUnit\Framework\TestCase
     }
 
     //==========================================================================
-    // getDistributionId (定数優先ケース)
+    // getDistributionId (constant takes precedence)
     //==========================================================================
 
     /**
@@ -71,7 +71,7 @@ final class PluginSettingsConstantsTest extends \PHPUnit\Framework\TestCase
      */
     public function test_getDistributionId_constant_takes_priority_over_database(): void
     {
-        // 定数が設定されていれば、データベースを参照せずにその値を返す
+        // When the constant is set, its value is returned without reading the database
         define('WACK_CF_INV_DISTRIBUTION_ID', 'ECONSTANT123');
 
         $result = PluginSettings::getDistributionId();
@@ -79,7 +79,7 @@ final class PluginSettingsConstantsTest extends \PHPUnit\Framework\TestCase
     }
 
     //==========================================================================
-    // getDryRun (定数優先ケース)
+    // getDryRun (constant takes precedence)
     //==========================================================================
 
     /**
@@ -88,7 +88,7 @@ final class PluginSettingsConstantsTest extends \PHPUnit\Framework\TestCase
      */
     public function test_getDryRun_true_constant_takes_priority(): void
     {
-        // WACK_CF_INV_DRY_RUN = true のとき、データベースを参照せずに true を返す
+        // When WACK_CF_INV_DRY_RUN = true, true is returned without reading the database
         define('WACK_CF_INV_DRY_RUN', true);
 
         $result = PluginSettings::getDryRun();
@@ -101,7 +101,7 @@ final class PluginSettingsConstantsTest extends \PHPUnit\Framework\TestCase
      */
     public function test_getDryRun_false_constant_takes_priority(): void
     {
-        // WACK_CF_INV_DRY_RUN = false のとき、データベースを参照せずに false を返す
+        // When WACK_CF_INV_DRY_RUN = false, false is returned without reading the database
         define('WACK_CF_INV_DRY_RUN', false);
 
         $result = PluginSettings::getDryRun();

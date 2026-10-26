@@ -14,10 +14,56 @@ use WP_Post;
 class CloudFrontInvalidationHook
 {
     /**
+     * Post statuses that are not publicly visible and are normally skipped
+     */
+    private const UNPUBLISHED_STATUSES = ['auto-draft', 'draft', 'inherit', 'pending'];
+
+    /**
+     * Post meta key where WordPress stores the original slug of a trashed post
+     */
+    private const DESIRED_SLUG_META_KEY = '_wp_desired_post_slug';
+
+    /**
+     * Interval in seconds used to deduplicate invalidations for the same save
+     */
+    private const CALLER_REFERENCE_INTERVAL = 10;
+
+    /**
+     * Status of each post before the current save, keyed by post ID
+     *
+     * Once 'publish' is recorded, it is kept until the invalidation is processed
+     * so that nested saves (e.g. wp_update_post() in a save_post callback) do not
+     * hide the unpublish transition.
+     *
+     * @var array<int, string>
+     */
+    private array $previousStatuses = [];
+
+    /**
+     * Slug of each post while it was published, keyed by post ID
+     *
+     * The slug may change on the same save that unpublishes the post (e.g. WordPress
+     * clears it when a user without the publish capability changes the post to pending),
+     * so the cached URL has to be resolved with the slug before the save.
+     * Like $previousStatuses, the first recorded slug is kept until the invalidation is processed.
+     *
+     * @var array<int, string>
+     */
+    private array $previousSlugs = [];
+
+    /**
      * Initialize the hooks
      */
     public function init(): void
     {
+        // Remember the previous status so that unpublishing (publish -> draft/pending) can be detected.
+        // This fires inside wp_insert_post before save_post and rest_after_insert_{$post_type}.
+        add_action('transition_post_status', [$this, 'rememberPreviousStatus'], 10, 3);
+
+        // Remember the slug while published so that the cached URL is invalidated even if the slug changes.
+        // This also fires inside wp_insert_post before save_post and rest_after_insert_{$post_type}.
+        add_action('post_updated', [$this, 'rememberPreviousSlug'], 10, 3);
+
         // Invalidate on standard post save (classic editor, admin edits, etc.).
         add_action('save_post', [$this, 'cloudFrontInvalidation'], 10, 3);
 
@@ -29,6 +75,30 @@ class CloudFrontInvalidationHook
             // Invalidate when a REST insert/update completes for each post type.
             add_action('rest_after_insert_' . $postType, [$this, 'cloudFrontInvalidationAfterRest'], 10, 3);
         }
+    }
+
+    /**
+     * Record the status of the post before the transition.
+     */
+    public function rememberPreviousStatus(string $newStatus, string $oldStatus, WP_Post $post): void
+    {
+        if (($this->previousStatuses[$post->ID] ?? null) === 'publish') {
+            return;
+        }
+
+        $this->previousStatuses[$post->ID] = $oldStatus;
+    }
+
+    /**
+     * Record the slug of the post before the update if it was published.
+     */
+    public function rememberPreviousSlug(int $postId, WP_Post $postAfter, WP_Post $postBefore): void
+    {
+        if ($postBefore->post_status !== 'publish' || isset($this->previousSlugs[$postId])) {
+            return;
+        }
+
+        $this->previousSlugs[$postId] = $postBefore->post_name;
     }
 
     /**
@@ -60,8 +130,9 @@ class CloudFrontInvalidationHook
             return;
         }
 
-        // Prevent multiple executions by adding a timestamp with minute precision to the caller reference
-        $callerReferenceID = $post->ID . '-' . date('YmdHi');
+        // The previous status and slug have been consumed by this invalidation
+        $previousSlug = $this->previousSlugs[$post->ID] ?? null;
+        unset($this->previousStatuses[$post->ID], $this->previousSlugs[$post->ID]);
 
         // Execute invalidation according to settings for each post type
         $paths = PluginSettings::get()->invalidationPathsFor($post->post_type);
@@ -83,15 +154,68 @@ class CloudFrontInvalidationHook
             return;
         }
 
-        $paths = array_map(fn($path) => $this->replacePlaceholder($path, $post), $paths);
+        $paths = $this->resolvePaths($paths, $post, $previousSlug);
 
         // Check if Dry Run mode is enabled
         if (PluginSettings::get()->dryRun()) {
             $distributionId = PluginSettings::get()->distributionId() ?? 'not defined';
             Utility::infoLog('[CloudFront Invalidation Dry Run] Distribution ID: ' . $distributionId . ', Paths: ' . json_encode($paths));
         } else {
-            $this->executeInvalidation($paths, $callerReferenceID);
+            $this->executeInvalidation($paths, $this->buildCallerReference($post, $paths, time()));
         }
+    }
+
+    /**
+     * Replace placeholders in the paths for the post.
+     *
+     * If the slug has changed from the one while published, paths resolved with
+     * the previous slug are also included so that the cached URL is invalidated.
+     *
+     * @param array       $paths        Paths with placeholders
+     * @param WP_Post     $post         The post being processed
+     * @param string|null $previousSlug Slug of the post while it was published
+     *
+     * @return array Paths with placeholders replaced, without duplicates
+     */
+    private function resolvePaths(array $paths, WP_Post $post, ?string $previousSlug): array
+    {
+        $resolvedPaths = array_map(fn($path) => $this->replacePlaceholder($path, $post), $paths);
+
+        if (!empty($previousSlug) && $previousSlug !== $post->post_name) {
+            $previousPost = clone $post;
+            $previousPost->post_name = $previousSlug;
+            $previousPost->post_status = 'publish';
+
+            $resolvedPaths = array_merge(
+                $resolvedPaths,
+                array_map(fn($path) => $this->replacePlaceholder($path, $previousPost), $paths),
+            );
+        }
+
+        return array_values(array_unique($resolvedPaths));
+    }
+
+    /**
+     * Build the CloudFront caller reference for the post.
+     *
+     * Duplicate hooks for the same save (e.g. the REST request and the meta box
+     * request of the block editor) share the same reference within a 10-second
+     * window, so CloudFront does not issue the invalidation twice. The post status
+     * is included so that a status change (e.g. publish -> draft) within the same
+     * window is issued as a separate invalidation. A fingerprint of the paths is
+     * included because CloudFront rejects a different batch with the same reference
+     * (InvalidationBatchAlreadyExists), e.g. when the slug changes within the window.
+     *
+     * @param WP_Post $post      The post being processed
+     * @param array   $paths     The resolved paths to be invalidated
+     * @param int     $timestamp The current Unix timestamp
+     */
+    private function buildCallerReference(WP_Post $post, array $paths, int $timestamp): string
+    {
+        $windowStart = intdiv($timestamp, self::CALLER_REFERENCE_INTERVAL) * self::CALLER_REFERENCE_INTERVAL;
+        $pathsFingerprint = substr(md5(implode("\n", $paths)), 0, 8);
+
+        return $post->ID . '-' . $post->post_status . '-' . date('YmdHis', $windowStart) . '-' . $pathsFingerprint;
     }
 
     /**
@@ -99,12 +223,10 @@ class CloudFrontInvalidationHook
      */
     private function shouldSkip(WP_Post $post, bool $isRestHook): bool
     {
-        // Prevent excessive invalidations by not clearing cache for unpublished posts
-        if (
-            $post->post_status === 'auto-draft'
-            || $post->post_status === 'draft'
-            || $post->post_status === 'inherit'
-            || $post->post_status === 'pending') {
+        // Prevent excessive invalidations by not clearing cache for unpublished posts,
+        // unless the post has just been unpublished and its cache must be cleared.
+        $wasPublished = ($this->previousStatuses[$post->ID] ?? null) === 'publish';
+        if (in_array($post->post_status, self::UNPUBLISHED_STATUSES, true) && !$wasPublished) {
             return true;
         }
 
@@ -179,6 +301,7 @@ class CloudFrontInvalidationHook
      * - %slug% will be replaced with the post slug
      * - If the placeholder is not found, the original path will be returned
      * - If the post does not have the slug, it will fallback to the post ID
+     * - If the post is trashed, the original slug stored by WordPress is used
      *
      * @param string $path_with_placeholder
      * @param WP_Post $post
@@ -189,10 +312,20 @@ class CloudFrontInvalidationHook
     {
         $temp_string = str_replace('%id%', $post->ID, $path_with_placeholder);
 
-        if (empty($post->post_name)) {
+        $slug = $post->post_name;
+        // WordPress renames the slug to "{slug}__trashed" (truncated if too long) when trashing
+        // and stores the original one in post meta, which is the slug of the cached path
+        if ($post->post_status === 'trash') {
+            $desiredSlug = get_post_meta($post->ID, self::DESIRED_SLUG_META_KEY, true);
+            if (is_string($desiredSlug) && $desiredSlug !== '') {
+                $slug = $desiredSlug;
+            }
+        }
+
+        if (empty($slug)) {
             return str_replace('%slug%', $post->ID, $temp_string);
         } else {
-            return str_replace('%slug%', $post->post_name, $temp_string);
+            return str_replace('%slug%', $slug, $temp_string);
         }
     }
 }
