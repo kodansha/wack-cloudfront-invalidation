@@ -17,7 +17,9 @@ It skips autosaves, revisions, and unpublished states such as `draft` and
 `auto-draft`. However, when a published post is unpublished (e.g. `publish` →
 `draft` / `pending`), invalidation is still performed so that the unpublished
 content is removed from the cache. The previous status is tracked with
-`transition_post_status`.
+`transition_post_status`. If the slug of a published post changes on save
+(e.g. WordPress clears it when a user without the publish capability changes
+the post to `pending`), the paths for the previous slug are also invalidated.
 
 ## Installation
 

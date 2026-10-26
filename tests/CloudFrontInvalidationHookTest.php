@@ -44,6 +44,14 @@ final class CloudFrontInvalidationHookTest extends WP_Mock\Tools\TestCase
         return $reflection->invoke($object, ...$args);
     }
 
+    /**
+     * Helper to read a private property
+     */
+    private function getPrivate(object $object, string $property): mixed
+    {
+        return (new \ReflectionProperty($object, $property))->getValue($object);
+    }
+
     //==========================================================================
     // replacePlaceholder
     //==========================================================================
@@ -150,6 +158,106 @@ final class CloudFrontInvalidationHookTest extends WP_Mock\Tools\TestCase
         $result = $this->callPrivate($hook, 'replacePlaceholder', '/articles/%slug%', $post);
 
         $this->assertSame('/articles/my-slug__trashed', $result);
+    }
+
+    //==========================================================================
+    // resolvePaths
+    //==========================================================================
+    // phpcs:ignore
+    public function test_resolvePaths_without_previous_slug(): void
+    {
+        // Without a previous slug, only the paths for the current post are returned
+        $post = $this->makePost(42, 'post', 'publish', 'my-slug');
+        $hook = new CloudFrontInvalidationHook();
+
+        $result = $this->callPrivate($hook, 'resolvePaths', ['/articles/%slug%', '/'], $post, null);
+
+        $this->assertSame(['/articles/my-slug', '/'], $result);
+    }
+
+    // phpcs:ignore
+    public function test_resolvePaths_includes_previous_slug_when_cleared_on_unpublish(): void
+    {
+        // When WordPress clears the slug on unpublishing (e.g. publish -> pending by a user
+        // without the publish capability), the paths for the previous slug are also included
+        $post = $this->makePost(42, 'post', 'pending', '');
+        $hook = new CloudFrontInvalidationHook();
+
+        $result = $this->callPrivate($hook, 'resolvePaths', ['/articles/%slug%', '/'], $post, 'original-slug');
+
+        $this->assertSame(['/articles/42', '/', '/articles/original-slug'], $result);
+    }
+
+    // phpcs:ignore
+    public function test_resolvePaths_includes_previous_slug_when_changed(): void
+    {
+        // When the slug is changed, the paths for both the new and previous slugs are included
+        $post = $this->makePost(42, 'post', 'draft', 'new-slug');
+        $hook = new CloudFrontInvalidationHook();
+
+        $result = $this->callPrivate($hook, 'resolvePaths', ['/articles/%slug%'], $post, 'original-slug');
+
+        $this->assertSame(['/articles/new-slug', '/articles/original-slug'], $result);
+    }
+
+    // phpcs:ignore
+    public function test_resolvePaths_same_previous_slug_not_duplicated(): void
+    {
+        // When the slug is unchanged, the paths are not duplicated
+        $post = $this->makePost(42, 'post', 'draft', 'my-slug');
+        $hook = new CloudFrontInvalidationHook();
+
+        $result = $this->callPrivate($hook, 'resolvePaths', ['/articles/%slug%'], $post, 'my-slug');
+
+        $this->assertSame(['/articles/my-slug'], $result);
+    }
+
+    //==========================================================================
+    // rememberPreviousSlug
+    //==========================================================================
+    // phpcs:ignore
+    public function test_rememberPreviousSlug_records_published_slug(): void
+    {
+        // The slug before the update is recorded when the post was published
+        $before = $this->makePost(42, 'post', 'publish', 'original-slug');
+        $after = $this->makePost(42, 'post', 'pending', '');
+        $hook = new CloudFrontInvalidationHook();
+
+        $hook->rememberPreviousSlug(42, $after, $before);
+
+        $this->assertSame(['42' => 'original-slug'], $this->getPrivate($hook, 'previousSlugs'));
+    }
+
+    // phpcs:ignore
+    public function test_rememberPreviousSlug_ignores_unpublished_post(): void
+    {
+        // The slug is not recorded when the post was not published before the update
+        $before = $this->makePost(42, 'post', 'draft', 'draft-slug');
+        $after = $this->makePost(42, 'post', 'draft', 'new-slug');
+        $hook = new CloudFrontInvalidationHook();
+
+        $hook->rememberPreviousSlug(42, $after, $before);
+
+        $this->assertSame([], $this->getPrivate($hook, 'previousSlugs'));
+    }
+
+    // phpcs:ignore
+    public function test_rememberPreviousSlug_keeps_first_recorded_slug(): void
+    {
+        // The first recorded slug is kept even if the post is updated again in the same request
+        $hook = new CloudFrontInvalidationHook();
+        $hook->rememberPreviousSlug(
+            42,
+            $this->makePost(42, 'post', 'publish', 'second-slug'),
+            $this->makePost(42, 'post', 'publish', 'original-slug'),
+        );
+        $hook->rememberPreviousSlug(
+            42,
+            $this->makePost(42, 'post', 'draft', 'third-slug'),
+            $this->makePost(42, 'post', 'publish', 'second-slug'),
+        );
+
+        $this->assertSame(['42' => 'original-slug'], $this->getPrivate($hook, 'previousSlugs'));
     }
 
     //==========================================================================
@@ -407,10 +515,11 @@ final class CloudFrontInvalidationHookTest extends WP_Mock\Tools\TestCase
     // phpcs:ignore
     public function test_previous_status_cleared_after_invalidation(): void
     {
-        // After the invalidation is processed, the recorded previous status is discarded and later draft saves are skipped
+        // After the invalidation is processed, the recorded previous status and slug are discarded and later draft saves are skipped
         $post = $this->makePost(1, 'post', 'draft', 'my-post');
         $hook = new CloudFrontInvalidationHook();
         $hook->rememberPreviousStatus('draft', 'publish', $post);
+        $hook->rememberPreviousSlug(1, $post, $this->makePost(1, 'post', 'publish', 'my-post'));
 
         WP_Mock::userFunction('wp_is_post_autosave')->with(1)->andReturn(false);
         WP_Mock::userFunction('wp_is_post_revision')->with(1)->andReturn(false);
@@ -423,5 +532,6 @@ final class CloudFrontInvalidationHookTest extends WP_Mock\Tools\TestCase
         $result = $this->callPrivate($hook, 'shouldSkip', $post, true);
 
         $this->assertTrue($result);
+        $this->assertSame([], $this->getPrivate($hook, 'previousSlugs'));
     }
 }

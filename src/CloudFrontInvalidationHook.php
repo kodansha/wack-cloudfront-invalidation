@@ -40,6 +40,18 @@ class CloudFrontInvalidationHook
     private array $previousStatuses = [];
 
     /**
+     * Slug of each post while it was published, keyed by post ID
+     *
+     * The slug may change on the same save that unpublishes the post (e.g. WordPress
+     * clears it when a user without the publish capability changes the post to pending),
+     * so the cached URL has to be resolved with the slug before the save.
+     * Like $previousStatuses, the first recorded slug is kept until the invalidation is processed.
+     *
+     * @var array<int, string>
+     */
+    private array $previousSlugs = [];
+
+    /**
      * Initialize the hooks
      */
     public function init(): void
@@ -47,6 +59,10 @@ class CloudFrontInvalidationHook
         // Remember the previous status so that unpublishing (publish -> draft/pending) can be detected.
         // This fires inside wp_insert_post before save_post and rest_after_insert_{$post_type}.
         add_action('transition_post_status', [$this, 'rememberPreviousStatus'], 10, 3);
+
+        // Remember the slug while published so that the cached URL is invalidated even if the slug changes.
+        // This also fires inside wp_insert_post before save_post and rest_after_insert_{$post_type}.
+        add_action('post_updated', [$this, 'rememberPreviousSlug'], 10, 3);
 
         // Invalidate on standard post save (classic editor, admin edits, etc.).
         add_action('save_post', [$this, 'cloudFrontInvalidation'], 10, 3);
@@ -71,6 +87,18 @@ class CloudFrontInvalidationHook
         }
 
         $this->previousStatuses[$post->ID] = $oldStatus;
+    }
+
+    /**
+     * Record the slug of the post before the update if it was published.
+     */
+    public function rememberPreviousSlug(int $postId, WP_Post $postAfter, WP_Post $postBefore): void
+    {
+        if ($postBefore->post_status !== 'publish' || isset($this->previousSlugs[$postId])) {
+            return;
+        }
+
+        $this->previousSlugs[$postId] = $postBefore->post_name;
     }
 
     /**
@@ -102,8 +130,9 @@ class CloudFrontInvalidationHook
             return;
         }
 
-        // The previous status has been consumed by this invalidation
-        unset($this->previousStatuses[$post->ID]);
+        // The previous status and slug have been consumed by this invalidation
+        $previousSlug = $this->previousSlugs[$post->ID] ?? null;
+        unset($this->previousStatuses[$post->ID], $this->previousSlugs[$post->ID]);
 
         $callerReferenceID = $this->buildCallerReference($post, time());
 
@@ -127,7 +156,7 @@ class CloudFrontInvalidationHook
             return;
         }
 
-        $paths = array_map(fn($path) => $this->replacePlaceholder($path, $post), $paths);
+        $paths = $this->resolvePaths($paths, $post, $previousSlug);
 
         // Check if Dry Run mode is enabled
         if (PluginSettings::get()->dryRun()) {
@@ -136,6 +165,36 @@ class CloudFrontInvalidationHook
         } else {
             $this->executeInvalidation($paths, $callerReferenceID);
         }
+    }
+
+    /**
+     * Replace placeholders in the paths for the post.
+     *
+     * If the slug has changed from the one while published, paths resolved with
+     * the previous slug are also included so that the cached URL is invalidated.
+     *
+     * @param array       $paths        Paths with placeholders
+     * @param WP_Post     $post         The post being processed
+     * @param string|null $previousSlug Slug of the post while it was published
+     *
+     * @return array Paths with placeholders replaced, without duplicates
+     */
+    private function resolvePaths(array $paths, WP_Post $post, ?string $previousSlug): array
+    {
+        $resolvedPaths = array_map(fn($path) => $this->replacePlaceholder($path, $post), $paths);
+
+        if (!empty($previousSlug) && $previousSlug !== $post->post_name) {
+            $previousPost = clone $post;
+            $previousPost->post_name = $previousSlug;
+            $previousPost->post_status = 'publish';
+
+            $resolvedPaths = array_merge(
+                $resolvedPaths,
+                array_map(fn($path) => $this->replacePlaceholder($path, $previousPost), $paths),
+            );
+        }
+
+        return array_values(array_unique($resolvedPaths));
     }
 
     /**
