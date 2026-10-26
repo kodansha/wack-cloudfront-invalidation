@@ -134,8 +134,6 @@ class CloudFrontInvalidationHook
         $previousSlug = $this->previousSlugs[$post->ID] ?? null;
         unset($this->previousStatuses[$post->ID], $this->previousSlugs[$post->ID]);
 
-        $callerReferenceID = $this->buildCallerReference($post, time());
-
         // Execute invalidation according to settings for each post type
         $paths = PluginSettings::get()->invalidationPathsFor($post->post_type);
 
@@ -163,7 +161,7 @@ class CloudFrontInvalidationHook
             $distributionId = PluginSettings::get()->distributionId() ?? 'not defined';
             Utility::infoLog('[CloudFront Invalidation Dry Run] Distribution ID: ' . $distributionId . ', Paths: ' . json_encode($paths));
         } else {
-            $this->executeInvalidation($paths, $callerReferenceID);
+            $this->executeInvalidation($paths, $this->buildCallerReference($post, $paths, time()));
         }
     }
 
@@ -204,13 +202,20 @@ class CloudFrontInvalidationHook
      * request of the block editor) share the same reference within a 10-second
      * window, so CloudFront does not issue the invalidation twice. The post status
      * is included so that a status change (e.g. publish -> draft) within the same
-     * window is issued as a separate invalidation.
+     * window is issued as a separate invalidation. A fingerprint of the paths is
+     * included because CloudFront rejects a different batch with the same reference
+     * (InvalidationBatchAlreadyExists), e.g. when the slug changes within the window.
+     *
+     * @param WP_Post $post      The post being processed
+     * @param array   $paths     The resolved paths to be invalidated
+     * @param int     $timestamp The current Unix timestamp
      */
-    private function buildCallerReference(WP_Post $post, int $timestamp): string
+    private function buildCallerReference(WP_Post $post, array $paths, int $timestamp): string
     {
         $windowStart = intdiv($timestamp, self::CALLER_REFERENCE_INTERVAL) * self::CALLER_REFERENCE_INTERVAL;
+        $pathsFingerprint = substr(md5(implode("\n", $paths)), 0, 8);
 
-        return $post->ID . '-' . $post->post_status . '-' . date('YmdHis', $windowStart);
+        return $post->ID . '-' . $post->post_status . '-' . date('YmdHis', $windowStart) . '-' . $pathsFingerprint;
     }
 
     /**

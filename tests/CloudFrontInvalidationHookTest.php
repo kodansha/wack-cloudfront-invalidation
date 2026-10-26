@@ -271,10 +271,10 @@ final class CloudFrontInvalidationHookTest extends WP_Mock\Tools\TestCase
         $hook = new CloudFrontInvalidationHook();
         $base = mktime(12, 0, 30, 10, 26, 2026);
 
-        $first = $this->callPrivate($hook, 'buildCallerReference', $post, $base);
-        $second = $this->callPrivate($hook, 'buildCallerReference', $post, $base + 9);
+        $first = $this->callPrivate($hook, 'buildCallerReference', $post, ['/articles/42'], $base);
+        $second = $this->callPrivate($hook, 'buildCallerReference', $post, ['/articles/42'], $base + 9);
 
-        $this->assertSame('42-publish-20261026120030', $first);
+        $this->assertStringStartsWith('42-publish-20261026120030-', $first);
         $this->assertSame($first, $second);
     }
 
@@ -286,11 +286,11 @@ final class CloudFrontInvalidationHookTest extends WP_Mock\Tools\TestCase
         $hook = new CloudFrontInvalidationHook();
         $base = mktime(12, 0, 39, 10, 26, 2026);
 
-        $first = $this->callPrivate($hook, 'buildCallerReference', $post, $base);
-        $second = $this->callPrivate($hook, 'buildCallerReference', $post, $base + 1);
+        $first = $this->callPrivate($hook, 'buildCallerReference', $post, ['/articles/42'], $base);
+        $second = $this->callPrivate($hook, 'buildCallerReference', $post, ['/articles/42'], $base + 1);
 
-        $this->assertSame('42-publish-20261026120030', $first);
-        $this->assertSame('42-publish-20261026120040', $second);
+        $this->assertStringStartsWith('42-publish-20261026120030-', $first);
+        $this->assertStringStartsWith('42-publish-20261026120040-', $second);
     }
 
     // phpcs:ignore
@@ -302,8 +302,23 @@ final class CloudFrontInvalidationHookTest extends WP_Mock\Tools\TestCase
         $hook = new CloudFrontInvalidationHook();
         $base = mktime(12, 0, 30, 10, 26, 2026);
 
-        $first = $this->callPrivate($hook, 'buildCallerReference', $published, $base);
-        $second = $this->callPrivate($hook, 'buildCallerReference', $unpublished, $base);
+        $first = $this->callPrivate($hook, 'buildCallerReference', $published, ['/articles/42'], $base);
+        $second = $this->callPrivate($hook, 'buildCallerReference', $unpublished, ['/articles/42'], $base);
+
+        $this->assertNotSame($first, $second);
+    }
+
+    // phpcs:ignore
+    public function test_buildCallerReference_differs_by_paths(): void
+    {
+        // Different path batches within the same 10 seconds produce different references,
+        // because CloudFront rejects a different batch with the same reference
+        $post = $this->makePost(42, 'post', 'publish');
+        $hook = new CloudFrontInvalidationHook();
+        $base = mktime(12, 0, 30, 10, 26, 2026);
+
+        $first = $this->callPrivate($hook, 'buildCallerReference', $post, ['/articles/new-slug', '/articles/old-slug'], $base);
+        $second = $this->callPrivate($hook, 'buildCallerReference', $post, ['/articles/new-slug'], $base);
 
         $this->assertNotSame($first, $second);
     }
