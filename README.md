@@ -77,8 +77,8 @@ You can use the following placeholders in each path:
 
 - `%id%`: Replaced with the post ID
 - `%slug%`: Replaced with the post slug (falls back to post ID when slug is empty).
-  For trashed posts, the `__trashed` suffix added by WordPress is removed so that
-  the original path is invalidated.
+  For trashed posts, the original slug stored by WordPress
+  (`_wp_desired_post_slug`) is used so that the original path is invalidated.
 
 ## `wack_cf_inv_{post_type}_paths` filter
 

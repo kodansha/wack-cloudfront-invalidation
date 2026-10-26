@@ -19,12 +19,21 @@ class CloudFrontInvalidationHook
     private const UNPUBLISHED_STATUSES = ['auto-draft', 'draft', 'inherit', 'pending'];
 
     /**
-     * Suffix WordPress appends to post_name when a post is moved to the trash
+     * Post meta key where WordPress stores the original slug of a trashed post
      */
-    private const TRASHED_SUFFIX = '__trashed';
+    private const DESIRED_SLUG_META_KEY = '_wp_desired_post_slug';
+
+    /**
+     * Interval in seconds used to deduplicate invalidations for the same save
+     */
+    private const CALLER_REFERENCE_INTERVAL = 10;
 
     /**
      * Status of each post before the current save, keyed by post ID
+     *
+     * Once 'publish' is recorded, it is kept until the invalidation is processed
+     * so that nested saves (e.g. wp_update_post() in a save_post callback) do not
+     * hide the unpublish transition.
      *
      * @var array<int, string>
      */
@@ -57,6 +66,10 @@ class CloudFrontInvalidationHook
      */
     public function rememberPreviousStatus(string $newStatus, string $oldStatus, WP_Post $post): void
     {
+        if (($this->previousStatuses[$post->ID] ?? null) === 'publish') {
+            return;
+        }
+
         $this->previousStatuses[$post->ID] = $oldStatus;
     }
 
@@ -89,8 +102,10 @@ class CloudFrontInvalidationHook
             return;
         }
 
-        // Prevent multiple executions by adding a timestamp with minute precision to the caller reference
-        $callerReferenceID = $post->ID . '-' . date('YmdHi');
+        // The previous status has been consumed by this invalidation
+        unset($this->previousStatuses[$post->ID]);
+
+        $callerReferenceID = $this->buildCallerReference($post, time());
 
         // Execute invalidation according to settings for each post type
         $paths = PluginSettings::get()->invalidationPathsFor($post->post_type);
@@ -121,6 +136,22 @@ class CloudFrontInvalidationHook
         } else {
             $this->executeInvalidation($paths, $callerReferenceID);
         }
+    }
+
+    /**
+     * Build the CloudFront caller reference for the post.
+     *
+     * Duplicate hooks for the same save (e.g. the REST request and the meta box
+     * request of the block editor) share the same reference within a 10-second
+     * window, so CloudFront does not issue the invalidation twice. The post status
+     * is included so that a status change (e.g. publish -> draft) within the same
+     * window is issued as a separate invalidation.
+     */
+    private function buildCallerReference(WP_Post $post, int $timestamp): string
+    {
+        $windowStart = intdiv($timestamp, self::CALLER_REFERENCE_INTERVAL) * self::CALLER_REFERENCE_INTERVAL;
+
+        return $post->ID . '-' . $post->post_status . '-' . date('YmdHis', $windowStart);
     }
 
     /**
@@ -206,7 +237,7 @@ class CloudFrontInvalidationHook
      * - %slug% will be replaced with the post slug
      * - If the placeholder is not found, the original path will be returned
      * - If the post does not have the slug, it will fallback to the post ID
-     * - If the post is trashed, the "__trashed" suffix is removed from the slug
+     * - If the post is trashed, the original slug stored by WordPress is used
      *
      * @param string $path_with_placeholder
      * @param WP_Post $post
@@ -218,9 +249,13 @@ class CloudFrontInvalidationHook
         $temp_string = str_replace('%id%', $post->ID, $path_with_placeholder);
 
         $slug = $post->post_name;
-        // WordPress renames the slug to "{slug}__trashed" when trashing, but the cached path uses the original slug
-        if ($post->post_status === 'trash' && str_ends_with($slug, self::TRASHED_SUFFIX)) {
-            $slug = substr($slug, 0, -strlen(self::TRASHED_SUFFIX));
+        // WordPress renames the slug to "{slug}__trashed" (truncated if too long) when trashing
+        // and stores the original one in post meta, which is the slug of the cached path
+        if ($post->post_status === 'trash') {
+            $desiredSlug = get_post_meta($post->ID, self::DESIRED_SLUG_META_KEY, true);
+            if (is_string($desiredSlug) && $desiredSlug !== '') {
+                $slug = $desiredSlug;
+            }
         }
 
         if (empty($slug)) {

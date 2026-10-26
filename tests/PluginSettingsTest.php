@@ -6,12 +6,12 @@ use WP_Mock;
 use WackCloudfrontInvalidation\PluginSettings;
 
 /**
- * PluginSettings クラスのテスト
+ * Tests for the PluginSettings class
  *
- * 定数 (WACK_CF_INV_DISTRIBUTION_ID / WACK_CF_INV_DRY_RUN) が未定義の場合の
- * 動作を検証する。定数が設定されているケースは PluginSettingsConstantsTest に分離している。
- * 定数が未定義のとき Constants::distributionIdConstant() / dryRunConstant() は
- * 自然に null を返すため、モックは不要。
+ * Verifies behavior when the constants (WACK_CF_INV_DISTRIBUTION_ID / WACK_CF_INV_DRY_RUN)
+ * are not defined. Cases with the constants set are separated into PluginSettingsConstantsTest.
+ * When the constants are not defined, Constants::distributionIdConstant() / dryRunConstant()
+ * naturally return null, so no mocking is needed.
  */
 final class PluginSettingsTest extends WP_Mock\Tools\TestCase
 {
@@ -134,23 +134,23 @@ final class PluginSettingsTest extends WP_Mock\Tools\TestCase
     }
 
     //==========================================================================
-    // getDistributionIdFromConstant (定数未定義ケース)
+    // getDistributionIdFromConstant (constant not defined)
     //==========================================================================
     // phpcs:ignore
     public function test_getDistributionIdFromConstant_not_defined(): void
     {
-        // WACK_CF_INV_DISTRIBUTION_ID が未定義のとき null を返す
+        // Returns null when WACK_CF_INV_DISTRIBUTION_ID is not defined
         $result = PluginSettings::getDistributionIdFromConstant();
         $this->assertNull($result);
     }
 
     //==========================================================================
-    // getDistributionId (定数未設定 = DB フォールバック)
+    // getDistributionId (constant not set = database fallback)
     //==========================================================================
     // phpcs:ignore
     public function test_getDistributionId_from_database_when_no_constant(): void
     {
-        // 定数が未設定のとき、データベースの値を返す
+        // Returns the database value when the constant is not set
         WP_Mock::userFunction('get_option')
             ->once()
             ->with('wack_cloudfront_invalidation_settings')
@@ -165,7 +165,7 @@ final class PluginSettingsTest extends WP_Mock\Tools\TestCase
     // phpcs:ignore
     public function test_getDistributionId_null_when_not_configured(): void
     {
-        // 定数もデータベースも未設定のとき null を返す
+        // Returns null when neither the constant nor the database value is set
         WP_Mock::userFunction('get_option')
             ->once()
             ->with('wack_cloudfront_invalidation_settings')
@@ -216,23 +216,23 @@ final class PluginSettingsTest extends WP_Mock\Tools\TestCase
     }
 
     //==========================================================================
-    // getDryRunFromConstant (定数未定義ケース)
+    // getDryRunFromConstant (constant not defined)
     //==========================================================================
     // phpcs:ignore
     public function test_getDryRunFromConstant_not_defined(): void
     {
-        // WACK_CF_INV_DRY_RUN が未定義のとき null を返す
+        // Returns null when WACK_CF_INV_DRY_RUN is not defined
         $result = PluginSettings::getDryRunFromConstant();
         $this->assertNull($result);
     }
 
     //==========================================================================
-    // getDryRun (定数未設定 = DB フォールバック)
+    // getDryRun (constant not set = database fallback)
     //==========================================================================
     // phpcs:ignore
     public function test_getDryRun_from_database_when_no_constant(): void
     {
-        // 定数が未設定のとき、データベースの値を返す
+        // Returns the database value when the constant is not set
         WP_Mock::userFunction('get_option')
             ->once()
             ->with('wack_cloudfront_invalidation_settings')
@@ -247,7 +247,7 @@ final class PluginSettingsTest extends WP_Mock\Tools\TestCase
     // phpcs:ignore
     public function test_getDryRun_false_by_default(): void
     {
-        // 定数もデータベースも未設定のとき false を返す
+        // Returns false when neither the constant nor the database value is set
         WP_Mock::userFunction('get_option')
             ->once()
             ->with('wack_cloudfront_invalidation_settings')
@@ -258,12 +258,12 @@ final class PluginSettingsTest extends WP_Mock\Tools\TestCase
     }
 
     //==========================================================================
-    // distributionId / dryRun インスタンスメソッド (定数未設定)
+    // distributionId / dryRun instance methods (constants not set)
     //==========================================================================
     // phpcs:ignore
     public function test_distributionId_returns_value_from_database(): void
     {
-        // コンストラクタは get_option を複数回呼ぶ (定数未設定のため DB フォールバックが走る)
+        // The constructor calls get_option multiple times (database fallback runs because the constants are not set)
         WP_Mock::userFunction('get_option')
             ->with('wack_cloudfront_invalidation_settings')
             ->andReturn([
