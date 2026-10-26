@@ -14,7 +14,10 @@ This plugin triggers invalidation for published content updates by using:
 - `rest_after_insert_{post_type}` (for `post` and public custom post types)
 
 It skips autosaves, revisions, and unpublished states such as `draft` and
-`auto-draft`.
+`auto-draft`. However, when a published post is unpublished (e.g. `publish` →
+`draft` / `pending`), invalidation is still performed so that the unpublished
+content is removed from the cache. The previous status is tracked with
+`transition_post_status`.
 
 ## Installation
 
@@ -73,7 +76,9 @@ each post type.
 You can use the following placeholders in each path:
 
 - `%id%`: Replaced with the post ID
-- `%slug%`: Replaced with the post slug (falls back to post ID when slug is empty)
+- `%slug%`: Replaced with the post slug (falls back to post ID when slug is empty).
+  For trashed posts, the `__trashed` suffix added by WordPress is removed so that
+  the original path is invalidated.
 
 ## `wack_cf_inv_{post_type}_paths` filter
 

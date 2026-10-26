@@ -14,10 +14,31 @@ use WP_Post;
 class CloudFrontInvalidationHook
 {
     /**
+     * Post statuses that are not publicly visible and are normally skipped
+     */
+    private const UNPUBLISHED_STATUSES = ['auto-draft', 'draft', 'inherit', 'pending'];
+
+    /**
+     * Suffix WordPress appends to post_name when a post is moved to the trash
+     */
+    private const TRASHED_SUFFIX = '__trashed';
+
+    /**
+     * Status of each post before the current save, keyed by post ID
+     *
+     * @var array<int, string>
+     */
+    private array $previousStatuses = [];
+
+    /**
      * Initialize the hooks
      */
     public function init(): void
     {
+        // Remember the previous status so that unpublishing (publish -> draft/pending) can be detected.
+        // This fires inside wp_insert_post before save_post and rest_after_insert_{$post_type}.
+        add_action('transition_post_status', [$this, 'rememberPreviousStatus'], 10, 3);
+
         // Invalidate on standard post save (classic editor, admin edits, etc.).
         add_action('save_post', [$this, 'cloudFrontInvalidation'], 10, 3);
 
@@ -29,6 +50,14 @@ class CloudFrontInvalidationHook
             // Invalidate when a REST insert/update completes for each post type.
             add_action('rest_after_insert_' . $postType, [$this, 'cloudFrontInvalidationAfterRest'], 10, 3);
         }
+    }
+
+    /**
+     * Record the status of the post before the transition.
+     */
+    public function rememberPreviousStatus(string $newStatus, string $oldStatus, WP_Post $post): void
+    {
+        $this->previousStatuses[$post->ID] = $oldStatus;
     }
 
     /**
@@ -99,12 +128,10 @@ class CloudFrontInvalidationHook
      */
     private function shouldSkip(WP_Post $post, bool $isRestHook): bool
     {
-        // Prevent excessive invalidations by not clearing cache for unpublished posts
-        if (
-            $post->post_status === 'auto-draft'
-            || $post->post_status === 'draft'
-            || $post->post_status === 'inherit'
-            || $post->post_status === 'pending') {
+        // Prevent excessive invalidations by not clearing cache for unpublished posts,
+        // unless the post has just been unpublished and its cache must be cleared.
+        $wasPublished = ($this->previousStatuses[$post->ID] ?? null) === 'publish';
+        if (in_array($post->post_status, self::UNPUBLISHED_STATUSES, true) && !$wasPublished) {
             return true;
         }
 
@@ -179,6 +206,7 @@ class CloudFrontInvalidationHook
      * - %slug% will be replaced with the post slug
      * - If the placeholder is not found, the original path will be returned
      * - If the post does not have the slug, it will fallback to the post ID
+     * - If the post is trashed, the "__trashed" suffix is removed from the slug
      *
      * @param string $path_with_placeholder
      * @param WP_Post $post
@@ -189,10 +217,16 @@ class CloudFrontInvalidationHook
     {
         $temp_string = str_replace('%id%', $post->ID, $path_with_placeholder);
 
-        if (empty($post->post_name)) {
+        $slug = $post->post_name;
+        // WordPress renames the slug to "{slug}__trashed" when trashing, but the cached path uses the original slug
+        if ($post->post_status === 'trash' && str_ends_with($slug, self::TRASHED_SUFFIX)) {
+            $slug = substr($slug, 0, -strlen(self::TRASHED_SUFFIX));
+        }
+
+        if (empty($slug)) {
             return str_replace('%slug%', $post->ID, $temp_string);
         } else {
-            return str_replace('%slug%', $post->post_name, $temp_string);
+            return str_replace('%slug%', $slug, $temp_string);
         }
     }
 }

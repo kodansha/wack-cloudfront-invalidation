@@ -107,6 +107,30 @@ final class CloudFrontInvalidationHookTest extends WP_Mock\Tools\TestCase
         $this->assertSame('/articles/42/my-slug', $result);
     }
 
+    // phpcs:ignore
+    public function test_replacePlaceholder_trashed_slug_suffix_removed(): void
+    {
+        // ゴミ箱に移動した投稿は __trashed サフィックスを除いた元のスラッグに置換される
+        $post = $this->makePost(42, 'post', 'trash', 'my-slug__trashed');
+        $hook = new CloudFrontInvalidationHook();
+
+        $result = $this->callPrivate($hook, 'replacePlaceholder', '/articles/%slug%', $post);
+
+        $this->assertSame('/articles/my-slug', $result);
+    }
+
+    // phpcs:ignore
+    public function test_replacePlaceholder_trashed_suffix_kept_when_not_trashed(): void
+    {
+        // ゴミ箱以外のステータスではスラッグをそのまま使う
+        $post = $this->makePost(42, 'post', 'publish', 'my-slug__trashed');
+        $hook = new CloudFrontInvalidationHook();
+
+        $result = $this->callPrivate($hook, 'replacePlaceholder', '/articles/%slug%', $post);
+
+        $this->assertSame('/articles/my-slug__trashed', $result);
+    }
+
     //==========================================================================
     // shouldSkip - 投稿ステータスによるスキップ判定
     //==========================================================================
@@ -204,6 +228,87 @@ final class CloudFrontInvalidationHookTest extends WP_Mock\Tools\TestCase
         WP_Mock::userFunction('wp_is_post_autosave')->with(1)->andReturn(false);
         // リビジョンの場合は親投稿 ID (truthy) を返す
         WP_Mock::userFunction('wp_is_post_revision')->with(1)->andReturn(100);
+        WP_Mock::userFunction('did_action')->with('rest_after_insert_post')->andReturn(0);
+
+        $result = $this->callPrivate($hook, 'shouldSkip', $post, false);
+
+        $this->assertTrue($result);
+    }
+
+    //==========================================================================
+    // shouldSkip - 公開取り下げ (publish -> draft/pending)
+    //==========================================================================
+    // phpcs:ignore
+    public function test_shouldSkip_false_when_unpublished_to_draft(): void
+    {
+        // publish から draft に変更された場合はキャッシュ削除のためスキップしない
+        $post = $this->makePost(1, 'post', 'draft', 'my-post');
+        $hook = new CloudFrontInvalidationHook();
+        $hook->rememberPreviousStatus('draft', 'publish', $post);
+
+        WP_Mock::userFunction('wp_is_post_autosave')->with(1)->andReturn(false);
+        WP_Mock::userFunction('wp_is_post_revision')->with(1)->andReturn(false);
+        WP_Mock::userFunction('did_action')->with('rest_after_insert_post')->andReturn(0);
+
+        $result = $this->callPrivate($hook, 'shouldSkip', $post, false);
+
+        $this->assertFalse($result);
+    }
+
+    // phpcs:ignore
+    public function test_shouldSkip_false_when_unpublished_to_pending(): void
+    {
+        // publish から pending に変更された場合はキャッシュ削除のためスキップしない
+        $post = $this->makePost(1, 'post', 'pending', 'my-post');
+        $hook = new CloudFrontInvalidationHook();
+        $hook->rememberPreviousStatus('pending', 'publish', $post);
+
+        WP_Mock::userFunction('wp_is_post_autosave')->with(1)->andReturn(false);
+        WP_Mock::userFunction('wp_is_post_revision')->with(1)->andReturn(false);
+        WP_Mock::userFunction('did_action')->with('rest_after_insert_post')->andReturn(0);
+
+        $result = $this->callPrivate($hook, 'shouldSkip', $post, false);
+
+        $this->assertFalse($result);
+    }
+
+    // phpcs:ignore
+    public function test_shouldSkip_draft_to_draft(): void
+    {
+        // 下書きのまま保存した場合は従来どおりスキップ
+        $post = $this->makePost(1, 'post', 'draft', 'my-post');
+        $hook = new CloudFrontInvalidationHook();
+        $hook->rememberPreviousStatus('draft', 'draft', $post);
+
+        $result = $this->callPrivate($hook, 'shouldSkip', $post, false);
+
+        $this->assertTrue($result);
+    }
+
+    // phpcs:ignore
+    public function test_shouldSkip_previous_status_is_per_post(): void
+    {
+        // 別の投稿の公開取り下げは影響しない
+        $unpublished = $this->makePost(1, 'post', 'draft', 'unpublished');
+        $other = $this->makePost(2, 'post', 'draft', 'other');
+        $hook = new CloudFrontInvalidationHook();
+        $hook->rememberPreviousStatus('draft', 'publish', $unpublished);
+
+        $result = $this->callPrivate($hook, 'shouldSkip', $other, false);
+
+        $this->assertTrue($result);
+    }
+
+    // phpcs:ignore
+    public function test_shouldSkip_autosave_after_unpublish(): void
+    {
+        // 公開取り下げでも autosave はスキップ
+        $post = $this->makePost(1, 'post', 'draft', 'my-post');
+        $hook = new CloudFrontInvalidationHook();
+        $hook->rememberPreviousStatus('draft', 'publish', $post);
+
+        WP_Mock::userFunction('wp_is_post_autosave')->with(1)->andReturn(100);
+        WP_Mock::userFunction('wp_is_post_revision')->with(1)->andReturn(false);
         WP_Mock::userFunction('did_action')->with('rest_after_insert_post')->andReturn(0);
 
         $result = $this->callPrivate($hook, 'shouldSkip', $post, false);
